@@ -82,6 +82,7 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 
 string strSignal = "none";
+int intTrigger = 0;
 void OnTick()
 {
      subPrintDetails();
@@ -90,8 +91,14 @@ void OnTick()
          
      } else {
          CheckTimeM5 = iTime(NULL,PERIOD_M5,0);
+         intTrigger += 1;
          //每次M5新柱，执行信号检测
-         strSignal = signal();
+         string strSg = signal();
+         if(strSignal != strSg && strSg != "none"){
+            //等于0表示趋势改变
+            strSignal = strSg;
+            intTrigger = 0;
+         }
      }
      
      //M1产生交易
@@ -120,6 +127,17 @@ string signal()
       return "down";
    }
    return "none";
+}
+
+//交易判断
+void doTrade(){
+   if(strSignal == "up" && intTrigger<30){
+      //buy
+   }
+   
+   if(strSignal == "down" && intTrigger<30){
+      //sell
+   }
 }
 
 
