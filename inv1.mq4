@@ -117,8 +117,8 @@ void OnTick()
  //信号检测
 string signal()
 {
-   double bullishDivVal = iCustom(NULL,PERIOD_M5,"FX5_Divergence_v2.0",2,2);  //up
-   double bearishDivVal = iCustom(NULL,PERIOD_M5,"FX5_Divergence_v2.0",3,2);  //down
+   double bullishDivVal = iCustom(NULL,PERIOD_M5,"FX5_Divergence_v2.0_yjx",2,2);  //up
+   double bearishDivVal = iCustom(NULL,PERIOD_M5,"FX5_Divergence_v2.0_yjx",3,2);  //down
    
    if(bullishDivVal != EMPTY_VALUE){
       return "up";
@@ -137,7 +137,7 @@ void doTrade(){
       if(intTrigger == 0){
          //产生信号
       }
-      checkTradeM1();
+      checkTradeM1(strSignal);
    }
    
    if(strSignal == "down" && intTrigger<30){
@@ -145,7 +145,7 @@ void doTrade(){
       if(intTrigger == 0){
          //产生信号
       }
-      checkTradeM1();
+      checkTradeM1(strSignal);
    }
 }
 

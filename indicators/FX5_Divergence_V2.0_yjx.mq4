@@ -3,7 +3,7 @@
 //|                                                              FX5 |
 //|                                                    hazem@uk2.net |
 //+------------------------------------------------------------------+
-#property copyright "Copyright © 2007, FX5"
+#property copyright "Copyright ?2007, FX5"
 #property link      "hazem@uk2.net"
 //----
 #property indicator_separate_window
@@ -29,6 +29,7 @@ double downOsMA[];
 double bullishDivergence[];
 double bearishDivergence[];
 double OsMA[];
+double Pip;
 //----
 static datetime lastAlertTime;
 //+------------------------------------------------------------------+
@@ -36,6 +37,12 @@ static datetime lastAlertTime;
 //+------------------------------------------------------------------+
 int init()
   {
+//----  add by yjx
+  if(Digits==2 || Digits==4) Pip = Point;
+   else if(Digits==3 || Digits==5) Pip = 10*Point;
+   else if(Digits==6) Pip = 100*Point;
+   
+   IndicatorBuffers(5); 
 //---- indicators
    SetIndexStyle(0, DRAW_HISTOGRAM, STYLE_SOLID, 2);
    SetIndexStyle(1, DRAW_HISTOGRAM, STYLE_SOLID, 2);
@@ -87,7 +94,11 @@ int start()
 //+------------------------------------------------------------------+
 void CalculateIndicator(int countedBars)
   {
-   for(int i = Bars - countedBars; i >= 0; i--)
+   int limit = Bars - 10;
+   if(countedBars >0){
+      countedBars = countedBars - 11;
+   }
+   for(int i = limit - countedBars; i >= 0; i--)
      {
       CalculateOsMA(i);
       CatchBullishDivergence(i + 2);
@@ -126,9 +137,12 @@ void CatchBullishDivergence(int shift)
        return; 
    int currentTrough = shift;
    int lastTrough = GetIndicatorLastTrough(shift);
+   //add by yjx
+   if(lastTrough - currentTrough <=11 || lastTrough - currentTrough >= 80)
+      return;
 //----
-   if(OsMA[currentTrough] > OsMA[lastTrough] && 
-      Low[currentTrough] < Low[lastTrough])
+   //if(OsMA[currentTrough] > OsMA[lastTrough] && Low[currentTrough] < Low[lastTrough])
+   if(OsMA[currentTrough] > OsMA[lastTrough] && (Low[lastTrough] - Low[currentTrough]) >= 2.5*Pip)
      {
        bullishDivergence[currentTrough] = OsMA[currentTrough];
       
@@ -145,8 +159,8 @@ void CatchBullishDivergence(int shift)
            DisplayAlert("Classical bullish divergence on: ", currentTrough);  
      }
 //----
-   if(OsMA[currentTrough] < OsMA[lastTrough] && 
-      Low[currentTrough] > Low[lastTrough])
+   //if(OsMA[currentTrough] < OsMA[lastTrough] && Low[currentTrough] > Low[lastTrough])
+   if(OsMA[currentTrough] < OsMA[lastTrough] && Low[currentTrough] - Low[lastTrough] >= 2.5*Pip)
      {
        bullishDivergence[currentTrough] = OsMA[currentTrough];
        //----
@@ -171,10 +185,14 @@ void CatchBearishDivergence(int shift)
    if(IsIndicatorPeak(shift) == false)
        return;
    int currentPeak = shift;
-   int lastPeak = GetIndicatorLastPeak(shift);   
+   int lastPeak = GetIndicatorLastPeak(shift);  
+   //add by yjx
+   if(lastPeak - currentPeak <=11 || lastPeak - currentPeak >= 80)
+      return; 
 //----
-   if(OsMA[currentPeak] < OsMA[lastPeak] && 
-      High[currentPeak] > High[lastPeak])
+   //Print("Pip=>",Pip,";value yjx =>", High[currentPeak] - High[lastPeak]);
+   //if(OsMA[currentPeak] < OsMA[lastPeak] && High[currentPeak] > High[lastPeak])
+   if(OsMA[currentPeak] < OsMA[lastPeak] && High[currentPeak] - High[lastPeak] >= 2.5*Pip)
      {
        bearishDivergence[currentPeak] = OsMA[currentPeak];
        //----
@@ -192,8 +210,8 @@ void CatchBearishDivergence(int shift)
                         currentPeak);  
      }
 //----
-   if(OsMA[currentPeak] > OsMA[lastPeak] && 
-       High[currentPeak] < High[lastPeak])
+   //if(OsMA[currentPeak] > OsMA[lastPeak] && High[currentPeak] < High[lastPeak])
+   if(OsMA[currentPeak] > OsMA[lastPeak] && High[lastPeak] - High[currentPeak] >=2.5*Pip )
      {
        bearishDivergence[currentPeak] = OsMA[currentPeak];
       
@@ -218,7 +236,8 @@ bool IsIndicatorPeak(int shift)
    if(OsMA[shift] > 0 + positiveSensitivity && 
       OsMA[shift] > OsMA[shift+1] && OsMA[shift] > OsMA[shift-1])
      {
-       for(int i = shift + 1; i < Bars; i++)
+       int limit = Bars - 10;
+       for(int i = shift + 1; i < limit; i++)
          {
            if(OsMA[i] < 0)
                return(true);
@@ -236,7 +255,8 @@ bool IsIndicatorTrough(int shift)
    if(OsMA[shift] < 0 + negativeSensitivity && 
       OsMA[shift] < OsMA[shift+1] && OsMA[shift] < OsMA[shift-1])
      {
-       for(int i = shift + 1; i < Bars; i++)
+      int limit = Bars - 10;
+       for(int i = shift + 1; i < limit; i++)
          {
            if(OsMA[i] > 0)
                return(true);
@@ -252,8 +272,8 @@ bool IsIndicatorTrough(int shift)
 int GetIndicatorLastPeak(int shift)
   {
    bool redZone = false;
-   
-   for(int i = shift; i < Bars; i++)
+   int limit = Bars - 10;
+   for(int i = shift; i < limit; i++)
      {
        if(OsMA[i] > 0 && redZone == false)
           continue;
@@ -275,8 +295,8 @@ int GetIndicatorLastPeak(int shift)
 int GetIndicatorLastTrough(int shift)
 {
    bool greenZone = false;
-   
-   for (int i = shift; i < Bars; i++)
+   int limit = Bars - 10;
+   for (int i = shift; i < limit; i++)
    {
       if (OsMA[i] < 0 && greenZone == false)
          continue;
