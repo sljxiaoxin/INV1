@@ -15,7 +15,7 @@
 #include "inc\trademgr.mqh"   //交易工具类
 #include "inc\citems.mqh"     //交易组item
 #include "inc\martimgr.mqh"   //马丁管理类
-#include "inc\mamgr.mqh"      //均线数值管理类
+//#include "inc\mamgr.mqh"      //均线数值管理类
 #include "inc\profitmgr.mqh"  
 
 extern int       MagicNumber     = 20180528;
@@ -28,11 +28,11 @@ extern int       MaxGroupNum     = 2;
 extern int       MaxMartiNum     = 0;
 extern double    Mutilplier      = 1;   //马丁加仓倍数
 extern int       GridSize        = 50;
-
+/*
 extern int       fastMa          = 50;
 extern int       slowMa          = 89;
 extern int       slowerMa        = 120;
-
+*/
 extern double    distance        = 5;   //加仓间隔点数
 extern int       TradingNum      = 2;    //未开对冲单的同时持仓最大数量 
 extern int       afterHandCloseMinutes = 180;   //手动解对冲后多少分钟后，订单组如还未到达盈利点，则强制关闭保护
@@ -82,7 +82,7 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 
 string strSignal = "none";
-int intTrigger = 0;
+int intTrigger = 0;   //产生信号过多少分钟
 void OnTick()
 {
      subPrintDetails();
@@ -91,7 +91,6 @@ void OnTick()
          
      } else {
          CheckTimeM5 = iTime(NULL,PERIOD_M5,0);
-         intTrigger += 1;
          //每次M5新柱，执行信号检测
          string strSg = signal();
          if(strSignal != strSg && strSg != "none"){
@@ -109,6 +108,8 @@ void OnTick()
          objCMartiMgr.CheckAllMarti();
          objProfitMgr.CheckTakeprofit();
          objProfitMgr.CheckOpenHedg();
+         doTrade();
+         intTrigger += 1;
      }
  }
 
@@ -133,10 +134,49 @@ string signal()
 void doTrade(){
    if(strSignal == "up" && intTrigger<30){
       //buy
+      if(intTrigger == 0){
+         //产生信号
+      }
+      checkTradeM1();
    }
    
    if(strSignal == "down" && intTrigger<30){
       //sell
+      if(intTrigger == 0){
+         //产生信号
+      }
+      checkTradeM1();
+   }
+}
+
+void checkTradeM1(string type){
+   if(objDict.Total()>=MaxGroupNum)return ;
+   double spanA,spanB,oop;
+   int t;
+   spanA = iIchimoku(NULL,0,2,3,5,MODE_SENKOUSPANA,1);
+   spanB = iIchimoku(NULL,0,2,3,5,MODE_SENKOUSPANB,1);
+   if(strSignal == "up"){
+      if(Close[1] > spanA && Close[1] > spanB){
+         //云图之上
+         t = objCTradeMgr.Buy(Lots, 0, 0, "DIV_UP");
+         if(t != 0){
+            if(OrderSelect(t, SELECT_BY_TICKET)==true){
+	            oop = OrderOpenPrice();
+            }
+            objDict.AddObject(t, new CItems(t, "DIV_UP", TPinMoney, oop));
+         }
+      }
+   }else if(strSignal == "down"){
+      if(Close[1] < spanA && Close[1] < spanB){
+         //云图之下
+         t = objCTradeMgr.Sell(Lots, 0, 0, "DIV_DOWN");
+         if(t != 0){
+            if(OrderSelect(t, SELECT_BY_TICKET)==true){
+	            oop = OrderOpenPrice();
+            }
+            objDict.AddObject(t, new CItems(t, "DIV_DOWN", TPinMoney, oop));
+         }
+      }
    }
 }
 
