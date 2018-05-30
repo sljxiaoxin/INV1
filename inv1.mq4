@@ -14,40 +14,23 @@
 #include "inc\dictionary.mqh" //keyvalue数据字典类
 #include "inc\trademgr.mqh"   //交易工具类
 #include "inc\citems.mqh"     //交易组item
-#include "inc\martimgr.mqh"   //马丁管理类
-//#include "inc\mamgr.mqh"      //均线数值管理类
-#include "inc\profitmgr.mqh"  
+
 
 extern int       MagicNumber     = 20180528;
-extern bool      isHandCloseHedg = false;   //是否手动解对冲
-extern double    Lots            = 0.1;
-extern double    hedgingPips     = 12;     //亏损多少点开对冲单默认12
-extern double    TPinMoney       = 11;          //Net TP (money)
-extern int       MaxGroupNum     = 2;
+extern double    Lots            = 1;
+extern double    TPinMoney       = 150;          //Net TP (money)
+extern int       intSL           = 8;            //止损点数，不用加0
 
-extern int       MaxMartiNum     = 0;
-extern double    Mutilplier      = 1;   //马丁加仓倍数
-extern int       GridSize        = 50;
-/*
-extern int       fastMa          = 50;
-extern int       slowMa          = 89;
-extern int       slowerMa        = 120;
-*/
 extern double    distance        = 5;   //加仓间隔点数
-extern int       TradingNum      = 2;    //未开对冲单的同时持仓最大数量 
-extern int       afterHandCloseMinutes = 180;   //手动解对冲后多少分钟后，订单组如还未到达盈利点，则强制关闭保护
 
 int       NumberOfTries   = 10,
           Slippage        = 5;
 datetime  CheckTimeM1,CheckTimeM5;
 double    Pip;
 CTradeMgr *objCTradeMgr;  //订单管理类
-CMartiMgr *objCMartiMgr;  //马丁管理类
 CDictionary *objDict = NULL;     //订单数据字典类
-CProfitMgr *objProfitMgr; //利润和仓位管理类
 int tmp = 0;
 
-string arrTradingType[5];   //用于记录当前交易中并且未对冲的交易类型，在subPrintDetails()初始化
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
@@ -61,11 +44,7 @@ int OnInit()
    if(objDict == NULL){
       objDict = new CDictionary();
       objCTradeMgr = new CTradeMgr(MagicNumber, Pip, NumberOfTries, Slippage);
-      objCMartiMgr = new CMartiMgr(objCTradeMgr, objDict);
-      objProfitMgr = new CProfitMgr(objCTradeMgr,objDict);
    }
-   objCMartiMgr.Init(GridSize, MaxMartiNum, Mutilplier);
-   objProfitMgr.Init(TPinMoney, isHandCloseHedg, hedgingPips, afterHandCloseMinutes);
 //---
    return(INIT_SUCCEEDED);
 }
@@ -107,9 +86,7 @@ void OnTick()
          return;
      } else {
          CheckTimeM1 = iTime(NULL,PERIOD_M1,0);
-         objCMartiMgr.CheckAllMarti();
-         objProfitMgr.CheckTakeprofit();
-         objProfitMgr.CheckOpenHedg();
+         tpMgr();
          doTrade();
          intTrigger += 1;
      }
@@ -132,22 +109,67 @@ string signal()
    return "none";
 }
 
+void tpMgr(){
+   if(objCTradeMgr.Total()<=0)return ;
+   int tradeType,tradeTicket;
+   double tradePrice,tradeProfit;
+   datetime dt,dtNow;
+   for(int cnt=0;cnt<OrdersTotal();cnt++)
+   {
+      OrderSelect(cnt,SELECT_BY_POS,MODE_TRADES);
+      if(OrderType()<=OP_SELL &&
+         OrderSymbol()==Symbol() &&
+         OrderMagicNumber()==MagicNumber)
+      {
+         dt = OrderOpenTime();
+         tradeType = OrderType();
+         tradePrice = OrderOpenPrice();
+         tradeTicket = OrderTicket();
+         tradeProfit = OrderProfit();
+         dtNow = iTime(NULL,PERIOD_M5,1);
+         if(tradeType == OP_BUY){
+            if(tradeProfit >= TPinMoney){
+               objCTradeMgr.Close(tradeTicket);
+            }else if((dtNow-dt)/(PERIOD_M5*60) >=10){
+               if(iClose(NULL,PERIOD_M5,1) < GetM5Ma10(1)){
+                  objCTradeMgr.Close(tradeTicket);
+               }
+            }
+            
+            
+         }
+         if(tradeType == OP_SELL){
+            if(tradeProfit >= TPinMoney){
+               objCTradeMgr.Close(tradeTicket);
+            }else if((dtNow-dt)/(PERIOD_M5*60) >=10){
+               if(iClose(NULL,PERIOD_M5,1) > GetM5Ma10(1)){
+                  objCTradeMgr.Close(tradeTicket);
+               }
+            }
+         }
+         
+         
+      }         
+   }
+}
+
+
 //交易判断
 void doTrade(){
-   if(strSignal == "up" && intTrigger<30){
+   if(strSignal == "up" && intTrigger<120){
       //buy
       if(intTrigger == 0){
          //产生信号
-         objProfitMgr.onSignal(strSignal);
+         //objProfitMgr.onSignal(strSignal);
       }
       checkTradeM1(strSignal);
    }
    
-   if(strSignal == "down" && intTrigger<30){
+   if(strSignal == "down" && intTrigger<120){
       //sell
       if(intTrigger == 0){
          //产生信号
-         objProfitMgr.onSignal(strSignal);
+         //objProfitMgr.onSignal(strSignal);
       }
       checkTradeM1(strSignal);
    }
@@ -155,82 +177,61 @@ void doTrade(){
 
 void checkTradeM1(string type){
    if(isSignalOpenOrder)return;
-   if(objDict.Total()>=MaxGroupNum)return ;
+   if(objCTradeMgr.Total()>0)return ;
    double spanA,spanB,oop;
    int t;
-   spanA = iIchimoku(NULL,0,2,3,5,MODE_SENKOUSPANA,1);
-   spanB = iIchimoku(NULL,0,2,3,5,MODE_SENKOUSPANB,1);
+   //spanA = iIchimoku(NULL,0,2,3,5,MODE_SENKOUSPANA,1);
+   //spanB = iIchimoku(NULL,0,2,3,5,MODE_SENKOUSPANB,1);
    if(strSignal == "up"){
-      if(Close[1] > spanA && Close[1] > spanB){
+      //if(Close[1] > spanA && Close[1] > spanB){
+      //if(Ask - GetM1Ma10(1) >0 && Ask - GetM1Ma10(1) <=2*Pip){
+      int iLest = iLowest(NULL,0,MODE_LOW,12,0);
+      double iL = iLow(NULL,0,iLest);
+      if(Ask - iL > 2*Pip)return;
          //云图之上
-         t = objCTradeMgr.Buy(Lots, 0, 0, "DIV_UP");
+         t = objCTradeMgr.Buy(Lots, intSL, 0, "DIV_UP");
          if(t != 0){
             isSignalOpenOrder = true;
-            if(OrderSelect(t, SELECT_BY_TICKET)==true){
-	            oop = OrderOpenPrice();
-            }
-            objDict.AddObject(t, new CItems(t, "DIV_UP", TPinMoney, oop));
+            
          }
-      }
+      //}
    }else if(strSignal == "down"){
-      if(Close[1] < spanA && Close[1] < spanB){
+      //if(Close[1] < spanA && Close[1] < spanB){
+      //if(GetM1Ma10(1) - Bid >0 && GetM1Ma10(1) -Bid <=2*Pip){
+      int iHest = iHighest(NULL,0,MODE_HIGH,12,0);
+      double iH = iHigh(NULL,0,iHest);
+      if(iH - Bid > 2*Pip)return;
          //云图之下
-         t = objCTradeMgr.Sell(Lots, 0, 0, "DIV_DOWN");
+         t = objCTradeMgr.Sell(Lots, intSL, 0, "DIV_DOWN");
          if(t != 0){
             isSignalOpenOrder = true;
-            if(OrderSelect(t, SELECT_BY_TICKET)==true){
-	            oop = OrderOpenPrice();
-            }
-            objDict.AddObject(t, new CItems(t, "DIV_DOWN", TPinMoney, oop));
+            
          }
-      }
+      //}
    }
 }
 
+double GetM1Ma10(int index){
+   return iMA(NULL,PERIOD_M1,10,0,MODE_EMA,PRICE_CLOSE,index);
+}
+
+double GetM5Ma10(int index){
+   return iMA(NULL,PERIOD_M5,10,0,MODE_EMA,PRICE_CLOSE,index);
+}
 
 
 
 void subPrintDetails()
 {
    //
-   string arrTradingType_Tmp[5] = {"none","none","none","none","none"};
-   string tradingTypeComment = "\n trading type:";
-   int forTmp = 0;
-   
    string sComment   = "";
    string sp         = "----------------------------------------\n";
    string NL         = "\n";
 
    sComment = sp;
    sComment = sComment + "Net = " + TotalNetProfit() + NL; 
-   sComment = sComment + "GroupNum = " + objDict.Total() + NL; 
    sComment = sComment + sp;
    sComment = sComment + "Lots=" + DoubleToStr(Lots,2) + NL;
-   CItems* currItem = objDict.GetFirstNode();
-   for(int i = 1; (currItem != NULL && CheckPointer(currItem)!=POINTER_INVALID); i++)
-   {
-      sComment = sComment + sp;
-      sComment = sComment + currItem.GetTicket()+ ":" + currItem.Hedg + " | ";
-      for(int j=0;j<currItem.Marti.Total();j++){
-         sComment = sComment + currItem.Marti.At(j) + ",";
-      }
-      //持仓类型填充
-      if(currItem.Hedg == 0 && forTmp<5){
-         arrTradingType_Tmp[forTmp] = currItem.GetType();
-         forTmp += 1;
-      }
-      sComment = sComment + NL;
-      if(objDict.Total() >0){
-         currItem = objDict.GetNextNode();
-      }else{
-         currItem = NULL;
-      }
-   }
-   ArrayCopy(arrTradingType,arrTradingType_Tmp,0,0,WHOLE_ARRAY);
-   for(int i=0;i<ArraySize(arrTradingType);i++){
-      tradingTypeComment = tradingTypeComment + arrTradingType[i] + " ,";
-   }
-   sComment = sComment + tradingTypeComment;
    Comment(sComment);
 }
 
@@ -248,26 +249,6 @@ double TotalNetProfit()
          }         
       }
       return op;
-}
-
-//交易中的单子，并且未开对冲的，是否包含传入的交易类型
-bool isTypeInTrading(string type){
-   for(int i=0;i<ArraySize(arrTradingType);i++){
-      if(arrTradingType[i] == type){
-         return true;
-      }
-   }
-   return false;
-}
-//交易中的单子，并且未开对冲的数量
-int tradingCount(){
-   int num = 0;
-   for(int i=0;i<ArraySize(arrTradingType);i++){
-      if(arrTradingType[i] != "none"){
-         num += 1;
-      }
-   }
-   return num;
 }
 
 

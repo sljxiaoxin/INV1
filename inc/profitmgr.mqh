@@ -167,7 +167,7 @@
                      m_releaseHedgAdd += m_releaseHedgStep;
                   }
                   */
-                  if(m_signal == 'up'){
+                  if(m_signal == "up"){
                      m_signal = "none";
                      if(GetOrderType(currItem.Hedg) == OP_SELL && !isOrderClosed(currItem.Hedg)){
                         m_TradeMgr.Close(currItem.Hedg);
@@ -176,7 +176,7 @@
                         m_TradeMgr.Close(currItem.GetTicket());
                      }
                   }
-                  if(m_signal == 'down'){
+                  if(m_signal == "down"){
                      m_signal = "none";
                      if(GetOrderType(currItem.Hedg) == OP_BUY && !isOrderClosed(currItem.Hedg)){
                         m_TradeMgr.Close(currItem.Hedg);
