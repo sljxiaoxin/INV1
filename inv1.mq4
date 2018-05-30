@@ -83,6 +83,7 @@ void OnDeinit(const int reason)
 
 string strSignal = "none";
 int intTrigger = 0;   //产生信号过多少分钟
+bool isSignalOpenOrder = false;  //当前信号是否已开单
 void OnTick()
 {
      subPrintDetails();
@@ -97,6 +98,7 @@ void OnTick()
             //等于0表示趋势改变
             strSignal = strSg;
             intTrigger = 0;
+            isSignalOpenOrder = false;
          }
      }
      
@@ -136,6 +138,7 @@ void doTrade(){
       //buy
       if(intTrigger == 0){
          //产生信号
+         objProfitMgr.onSignal(strSignal);
       }
       checkTradeM1(strSignal);
    }
@@ -144,12 +147,14 @@ void doTrade(){
       //sell
       if(intTrigger == 0){
          //产生信号
+         objProfitMgr.onSignal(strSignal);
       }
       checkTradeM1(strSignal);
    }
 }
 
 void checkTradeM1(string type){
+   if(isSignalOpenOrder)return;
    if(objDict.Total()>=MaxGroupNum)return ;
    double spanA,spanB,oop;
    int t;
@@ -160,6 +165,7 @@ void checkTradeM1(string type){
          //云图之上
          t = objCTradeMgr.Buy(Lots, 0, 0, "DIV_UP");
          if(t != 0){
+            isSignalOpenOrder = true;
             if(OrderSelect(t, SELECT_BY_TICKET)==true){
 	            oop = OrderOpenPrice();
             }
@@ -171,6 +177,7 @@ void checkTradeM1(string type){
          //云图之下
          t = objCTradeMgr.Sell(Lots, 0, 0, "DIV_DOWN");
          if(t != 0){
+            isSignalOpenOrder = true;
             if(OrderSelect(t, SELECT_BY_TICKET)==true){
 	            oop = OrderOpenPrice();
             }

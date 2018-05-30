@@ -19,6 +19,7 @@
          bool m_isHandCloseHedg;  //是否手动解对冲
          double m_hedgingPips;    //多少点开对冲单
          int m_afterHandCloseMinutes;  //手动解对冲后，过多久自动平仓，分钟数
+         string m_signal;         //当前信号 up / down 使用后需重置
       public:
          
          CProfitMgr(CTradeMgr *TradeMgr, CDictionary *_dict){
@@ -37,13 +38,22 @@
          double GetNetPips(int ticket);      //获取盈利点数
          bool isOrderClosed(int ticket);     //订单是否已关闭
          bool CloseItem(CItems* item);   //关闭item内所有订单
+         int GetOrderType(int ticket);    //获取订单类型
+         void onSignal(string signal);    //buy or sell 信号
  };
+ 
  void CProfitMgr::Init(double tpmoney, bool isHandCloseHedg, double hedgingPips, int afterMinutes)
  {
       m_TpInMoney = tpmoney;
       m_isHandCloseHedg = isHandCloseHedg;
       m_hedgingPips = hedgingPips; //亏损多少点开对冲单
       m_afterHandCloseMinutes = afterMinutes;
+      m_signal = "none";
+ }
+ 
+ void CProfitMgr::onSignal(string signal)
+ {
+      m_signal = signal;    
  }
  /*
  void CProfitMgr::EachColumnDo(void)
@@ -157,6 +167,24 @@
                      m_releaseHedgAdd += m_releaseHedgStep;
                   }
                   */
+                  if(m_signal == 'up'){
+                     m_signal = "none";
+                     if(GetOrderType(currItem.Hedg) == OP_SELL && !isOrderClosed(currItem.Hedg)){
+                        m_TradeMgr.Close(currItem.Hedg);
+                     }
+                     if(GetOrderType(currItem.GetTicket()) == OP_SELL && !isOrderClosed(currItem.GetTicket())){
+                        m_TradeMgr.Close(currItem.GetTicket());
+                     }
+                  }
+                  if(m_signal == 'down'){
+                     m_signal = "none";
+                     if(GetOrderType(currItem.Hedg) == OP_BUY && !isOrderClosed(currItem.Hedg)){
+                        m_TradeMgr.Close(currItem.Hedg);
+                     }
+                     if(GetOrderType(currItem.GetTicket()) == OP_BUY && !isOrderClosed(currItem.GetTicket())){
+                        m_TradeMgr.Close(currItem.GetTicket());
+                     }
+                  }
                }
             }
          }
@@ -173,6 +201,7 @@
             Print("DeleteObjectByKey:",ord_arr[m]);
          }
      }
+     m_signal = "none"; //确保信号及时重置
      
  }
  //获取单个item总利润
@@ -264,6 +293,14 @@
          }
     }
     return false;
+ }
+ 
+ int CProfitMgr::GetOrderType(int ticket)
+ {
+      if(OrderSelect(ticket, SELECT_BY_TICKET)==true){
+         return OrderType();
+      }
+      return -1;
  }
  
  
